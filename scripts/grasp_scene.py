@@ -84,7 +84,7 @@ CONTACT_ATTRS = {
 TACTILE_SITES = {
     "index": ("if_distal_link", "0.007 0.03482 -0.02152", "0.014"),
     "middle": ("mf_distal_link", "0.007 0.03726 -0.02346", "0.0125"),
-    "ring": ("rf_distal_link", "0.007 0.03349 -0.0235", "0.014"),
+    "ring": ("rf_distal_link", "0.007 0.03349 -0.0235", "0.015"),
     "little": ("lf_distal_link", "0.007 0.02295 -0.01689", "0.0125"),
     "thumb": ("th_distal_link", "0.007 0.01042 -0.00172", "0.016"),
 }
@@ -455,7 +455,7 @@ def rotation_matrix_to_rpy(matrix: np.ndarray) -> np.ndarray:
     return np.array([roll, pitch, yaw])
 
 
-class FingertipStatePlot:
+class GraspStatePlot:
     def __init__(
         self,
         model: mujoco.MjModel,
@@ -463,28 +463,23 @@ class FingertipStatePlot:
         reference_data: mujoco.MjData,
     ) -> None:
         self.sensor_ids = []
-        self.site_ids = []
         self.labels = []
-        for sensor_name, site_name in zip(TACTILE_SENSOR_NAMES, TACTILE_SITE_NAMES):
+        for sensor_name in TACTILE_SENSOR_NAMES:
             sensor_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
             if sensor_id < 0:
                 raise ValueError(f"Tactile sensor not found: {sensor_name}")
-            site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
-            if site_id < 0:
-                raise ValueError(f"Fingertip site not found: {site_name}")
             self.sensor_ids.append(sensor_id)
-            self.site_ids.append(site_id)
             self.labels.append(sensor_name.removesuffix("_touch"))
 
-        self.base_pos = np.array(
-            [reference_data.site_xpos[site_id].copy() for site_id in self.site_ids]
-        )
-        self.base_mat = np.array(
-            [reference_data.site_xmat[site_id].reshape(3, 3).copy() for site_id in self.site_ids]
-        )
-        self.prev_pos = np.array([data.site_xpos[site_id].copy() for site_id in self.site_ids])
-        self.prev_vel = np.zeros_like(self.base_pos)
-        self.accel = np.zeros_like(self.base_pos)
+        self.hand_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "hand_mount")
+        if self.hand_body_id < 0:
+            raise ValueError("Body not found: hand_mount")
+
+        self.base_pos = reference_data.xpos[self.hand_body_id].copy()
+        self.base_mat = reference_data.xmat[self.hand_body_id].reshape(3, 3).copy()
+        self.prev_pos = data.xpos[self.hand_body_id].copy()
+        self.prev_vel = np.zeros(3)
+        self.accel = np.zeros(3)
         plt.ion()
         self.fig, (self.force_ax, self.state_ax) = plt.subplots(
             2,
@@ -513,7 +508,7 @@ class FingertipStatePlot:
     def update(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
         now = time.time()
         dt = max(now - self.last_update_time, 1e-6)
-        current_pos = np.array([data.site_xpos[site_id].copy() for site_id in self.site_ids])
+        current_pos = data.xpos[self.hand_body_id].copy()
         current_vel = (current_pos - self.prev_pos) / dt
         raw_accel = (current_vel - self.prev_vel) / dt
         self.accel = 0.8 * self.accel + 0.2 * raw_accel
@@ -543,29 +538,26 @@ class FingertipStatePlot:
     def format_state(self, model: mujoco.MjModel, data: mujoco.MjData) -> str:
         rows = [
             "reference: hand_x/y/z/roll/pitch/yaw = 0",
-            "finger   forceN     dx      dy      dz    roll   pitch     yaw      ax      ay      az",
-            "         (N)       (m)     (m)     (m)    (rad)   (rad)   (rad)   (m/s2)  (m/s2)  (m/s2)",
+            "touch force (N): "
+            + "  ".join(
+                f"{label}={self.force_value(model, data, sensor_id):.3f}"
+                for label, sensor_id in zip(self.labels, self.sensor_ids)
+            ),
+            "",
+            "body        dx      dy      dz    roll   pitch     yaw      ax      ay      az",
+            "           (m)     (m)     (m)    (rad)   (rad)   (rad)   (m/s2)  (m/s2)  (m/s2)",
         ]
-        for label, sensor_id, site_id, base_pos, base_mat, accel in zip(
-            self.labels,
-            self.sensor_ids,
-            self.site_ids,
-            self.base_pos,
-            self.base_mat,
-            self.accel,
-        ):
-            pos = data.site_xpos[site_id]
-            mat = data.site_xmat[site_id].reshape(3, 3)
-            rel_pos = base_mat.T @ (pos - base_pos)
-            rel_mat = base_mat.T @ mat
-            rel_rpy = rotation_matrix_to_rpy(rel_mat)
-            rel_accel = base_mat.T @ accel
-            rows.append(
-                f"{label:<7} {self.force_value(model, data, sensor_id):7.3f} "
-                f"{rel_pos[0]:7.4f} {rel_pos[1]:7.4f} {rel_pos[2]:7.4f} "
-                f"{rel_rpy[0]:7.3f} {rel_rpy[1]:7.3f} {rel_rpy[2]:7.3f} "
-                f"{rel_accel[0]:7.2f} {rel_accel[1]:7.2f} {rel_accel[2]:7.2f}"
-            )
+        pos = data.xpos[self.hand_body_id]
+        mat = data.xmat[self.hand_body_id].reshape(3, 3)
+        rel_pos = self.base_mat.T @ (pos - self.base_pos)
+        rel_mat = self.base_mat.T @ mat
+        rel_rpy = rotation_matrix_to_rpy(rel_mat)
+        rel_accel = self.base_mat.T @ self.accel
+        rows.append(
+            f"hand_mount {rel_pos[0]:7.4f} {rel_pos[1]:7.4f} {rel_pos[2]:7.4f} "
+            f"{rel_rpy[0]:7.3f} {rel_rpy[1]:7.3f} {rel_rpy[2]:7.3f} "
+            f"{rel_accel[0]:7.2f} {rel_accel[1]:7.2f} {rel_accel[2]:7.2f}"
+        )
         return "\n".join(rows)
 
     @staticmethod
@@ -587,7 +579,7 @@ def main() -> None:
     data = mujoco.MjData(model)
     set_initial_controls(model, data)
     reference_data = make_zero_hand_reference_data(model)
-    tactile_plot = FingertipStatePlot(model, data, reference_data)
+    tactile_plot = GraspStatePlot(model, data, reference_data)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         # 设置为默认自由相机模式
