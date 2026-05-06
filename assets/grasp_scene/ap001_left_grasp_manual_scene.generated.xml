@@ -36,7 +36,7 @@
     <light name="key_light" pos="-0.35 -0.25 0.6" dir="0.6 0.6 -1" directional="true" />
     <camera name="grasp_view" pos="0.22 -0.24 0.22" xyaxes="0.73 0.68 0 -0.32 0.34 0.88" />
     <geom name="table_top" type="box" pos="0 0.1 -0.045" size="0.22 0.22 0.015" material="table_mat" contype="1" conaffinity="1" condim="4" friction="1.5 0.05 0.005" solimp="0.995 0.999 0.0005" solref="0.004 1" margin="0.0002" gap="0" />
-    <body name="grasp_cube" pos="0.001 0.145 -0.005">
+    <body name="grasp_cube" pos="0.01 0.145 -0.005">
       <freejoint name="cube_freejoint" />
       <geom name="grasp_cube_geom" type="box" size="0.025 0.025 0.025" material="cube_mat" mass="0.08" contype="1" conaffinity="1" condim="4" friction="3.0 0.1 0.01" solimp="0.995 0.999 0.0005" solref="0.003 1" margin="0.0002" gap="0" />
     </body>
@@ -58,7 +58,7 @@
           <inertial pos="0.00709506 -4.21357e-05 -0.0028895" quat="0 0.707107 0 0.707107" mass="0.0318308" diaginertia="1.56479e-06 1.56373e-06 9.99018e-7" />
           <joint name="if_distal_link" pos="0 0 0" axis="-1 0 0" damping="0.2" armature="0.001" />
           <geom type="mesh" rgba="1 1 1 1" mesh="if_distal_link" contype="1" conaffinity="1" condim="4" friction="2.5 0.08 0.008" solimp="0.995 0.999 0.0005" solref="0.004 1" margin="0.0002" gap="0" />
-          <site name="index_tip_touch_site" type="sphere" pos="0.007 0.03482 -0.02152" size="0.0135" rgba="1 0.15 0.05 0.45" />
+          <site name="index_tip_touch_site" type="sphere" pos="0.007 0.03482 -0.02152" size="0.014" rgba="1 0.15 0.05 0.45" />
         </body>
       </body>
       <body name="if_connecting_link" pos="0.0251127 0.116346 0.0333594" quat="0.998472 -0.00121866 0.0494591 -0.0246022" gravcomp="1">
@@ -90,7 +90,7 @@
           <inertial pos="0.00756929 -0.000209135 -0.00288247" quat="0 0.707107 0 0.707107" mass="0.03118308" diaginertia="1.56479e-06 1.56372e-06 9.99018e-7" />
           <joint name="rf_distal_link" pos="0 0 0" axis="-1 0 0" damping="0.2" armature="0.001" />
           <geom type="mesh" rgba="1 1 1 1" mesh="rf_distal_link" contype="1" conaffinity="1" condim="4" friction="2.5 0.08 0.008" solimp="0.995 0.999 0.0005" solref="0.004 1" margin="0.0002" gap="0" />
-          <site name="ring_tip_touch_site" type="sphere" pos="0.007 0.03349 -0.0235" size="0.0135" rgba="1 0.15 0.05 0.45" />
+          <site name="ring_tip_touch_site" type="sphere" pos="0.007 0.03349 -0.0235" size="0.014" rgba="1 0.15 0.05 0.45" />
         </body>
       </body>
       <body name="rf_connecting_link" pos="-0.0163677 0.115044 0.0362256" quat="0.99939 -0.000281476 -0.00829235 0.0339234" gravcomp="1">

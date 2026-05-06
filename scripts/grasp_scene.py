@@ -82,9 +82,9 @@ CONTACT_ATTRS = {
 # 触觉传感器位点配置
 # 键: 手指名称, 值: (所属连杆名称, 传感器位置偏移, 传感器尺寸)
 TACTILE_SITES = {
-    "index": ("if_distal_link", "0.007 0.03482 -0.02152", "0.0135"),
+    "index": ("if_distal_link", "0.007 0.03482 -0.02152", "0.014"),
     "middle": ("mf_distal_link", "0.007 0.03726 -0.02346", "0.0125"),
-    "ring": ("rf_distal_link", "0.007 0.03349 -0.0235", "0.0135"),
+    "ring": ("rf_distal_link", "0.007 0.03349 -0.0235", "0.014"),
     "little": ("lf_distal_link", "0.007 0.02295 -0.01689", "0.0125"),
     "thumb": ("th_distal_link", "0.007 0.01042 -0.00172", "0.016"),
 }
@@ -336,7 +336,8 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
             "gap": "0",
         },
     )
-    cube = ET.SubElement(worldbody, "body", {"name": "grasp_cube", "pos": "0.001 0.145 -0.005"})
+    # 创建抓取立方体主体，位置在 (0.001, 0.145, -0.005) 米处
+    cube = ET.SubElement(worldbody, "body", {"name": "grasp_cube", "pos": "0.01 0.145 -0.005"})
     ET.SubElement(cube, "freejoint", {"name": "cube_freejoint"})
     ET.SubElement(
         cube,
