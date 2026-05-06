@@ -52,13 +52,15 @@ INITIAL_FINGER_CTRL = {
     "thumb": 0.0,
 }
 FINGER_ACTUATOR_KP = {
-    "index_finger": "12",
-    "middle_finger": "12",
-    "ring_finger": "12",
-    "little_finger": "12",
-    "thumb_root": "10",
-    "thumb": "10",
+    "index_finger": "35",
+    "middle_finger": "35",
+    "ring_finger": "35",
+    "little_finger": "35",
+    "thumb_root": "30",
+    "thumb": "30",
 }
+SIM_STEPS_PER_RENDER = 5
+PLOT_UPDATE_INTERVAL = 0.12
 FINGER_JOINTS = {
     "if_proximal_link",
     "mf_proximal_link",
@@ -153,8 +155,8 @@ def stabilize_hand_tree(hand_root: ET.Element) -> None:
 
     for joint in worldbody.findall(".//joint"):
         if joint.get("name") in FINGER_JOINTS:
-            joint.set("damping", "0.45")
-            joint.set("armature", "0.004")
+            joint.set("damping", "0.22")
+            joint.set("armature", "0.0015")
             continue
 
         if joint.get("type") == "slide":
@@ -518,7 +520,7 @@ class FingertipStatePlot:
         self.prev_vel = current_vel
         self.last_update_time = now
 
-        if now - self.last_draw_time < 0.05:
+        if now - self.last_draw_time < PLOT_UPDATE_INTERVAL:
             return
 
         forces = []
@@ -591,10 +593,11 @@ def main() -> None:
         viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
 
         while viewer.is_running():
-            mujoco.mj_step(model, data)
+            for _ in range(SIM_STEPS_PER_RENDER):
+                mujoco.mj_step(model, data)
             tactile_plot.update(model, data)
             viewer.sync()
-            time.sleep(model.opt.timestep)
+            time.sleep(model.opt.timestep * SIM_STEPS_PER_RENDER)
 
 
 if __name__ == "__main__":
