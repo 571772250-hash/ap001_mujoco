@@ -70,11 +70,11 @@ CONTACT_ATTRS = {
     "gap": "0",
 }
 TACTILE_SITES = {
-    "index": ("if_distal_link", "0.007 0.05 -0.01", "0.03"),
-    "middle": ("mf_distal_link", "0.007 0.06 -0.01", "0.03"),
-    "ring": ("rf_distal_link", "0.007 0.05 -0.01", "0.03"),
-    "little": ("lf_distal_link", "0.007 0.04 -0.01", "0.03"),
-    "thumb": ("th_distal_link", "0.007 0.000 -0.020", "0.03"),
+    "index": ("if_distal_link", "0.007 0.03482 -0.02152", "0.0135"),
+    "middle": ("mf_distal_link", "0.007 0.03726 -0.02346", "0.0125"),
+    "ring": ("rf_distal_link", "0.007 0.03349 -0.0235", "0.0135"),
+    "little": ("lf_distal_link", "0.007 0.02295 -0.01689", "0.0125"),
+    "thumb": ("th_distal_link", "0.007 0.01042 -0.00172", "0.015"),
 }
 # TACTILE_SITES = {
 #     "index": ("if_distal_link", "0.007 0.026 -0.003", "0.012"),
