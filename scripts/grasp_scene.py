@@ -42,6 +42,22 @@ INITIAL_FINGER_CTRL = {
     "thumb_root": 1.57,
     "thumb": 0.0,
 }
+FINGER_ACTUATOR_KP = {
+    "index_finger": "12",
+    "middle_finger": "12",
+    "ring_finger": "12",
+    "little_finger": "12",
+    "thumb_root": "10",
+    "thumb": "10",
+}
+FINGER_JOINTS = {
+    "if_proximal_link",
+    "mf_proximal_link",
+    "rf_proximal_link",
+    "lf_proximal_link",
+    "th_root_link",
+    "th_slider_connecting_link",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -96,6 +112,11 @@ def stabilize_hand_tree(hand_root: ET.Element) -> None:
         body.set("gravcomp", "1")
 
     for joint in worldbody.findall(".//joint"):
+        if joint.get("name") in FINGER_JOINTS:
+            joint.set("damping", "0.45")
+            joint.set("armature", "0.004")
+            continue
+
         if joint.get("type") == "slide":
             joint.set("damping", max_float_text(joint.get("damping"), 0.3))
             joint.set("armature", max_float_text(joint.get("armature"), 0.002))
@@ -266,6 +287,8 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
     if source_actuator is not None:
         for child in list(source_actuator):
             child.set("ctrllimited", "true")
+            if child.get("name") in FINGER_ACTUATOR_KP:
+                child.set("kp", FINGER_ACTUATOR_KP[child.get("name")])
             actuator.append(child)
 
     indent(scene)

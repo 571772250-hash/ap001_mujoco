@@ -52,7 +52,7 @@
       </body>
       <body name="if_proximal_link" pos="0.0215356 0.110229 0.0277474" quat="0.998472 -0.00121866 0.0494591 -0.0246022" gravcomp="1">
         <inertial pos="0.00759963 0.0174149 -0.00283219" quat="0.485891 0.513505 -0.513693 0.48615" mass="0.0293521" diaginertia="2.37494e-07 2.32569e-07 1.02726e-07" />
-        <joint name="if_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.2" armature="0.001" />
+        <joint name="if_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.45" armature="0.004" />
         <geom type="mesh" rgba="1 1 1 1" mesh="if_proximal_link" />
         <body name="if_distal_link" pos="0 0.0357192 -0.00379239" gravcomp="1">
           <inertial pos="0.00709506 -4.21357e-05 -0.0028895" quat="0 0.707107 0 0.707107" mass="0.0318308" diaginertia="1.56479e-06 1.56373e-06 9.99018e-7" />
@@ -67,7 +67,7 @@
       </body>
       <body name="mf_proximal_link" pos="0.00144328 0.111668 0.0317646" quat="1 -1.154e-07 -0.000718979 -0.000160505" gravcomp="1">
         <inertial pos="0.00759986 0.0193215 -0.00405752" quat="0.707099 0.707115 0 0" mass="0.0237723" diaginertia="3.62189e-07 3.54265e-07 1.37124e-07" />
-        <joint name="mf_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.2" armature="0.001" />
+        <joint name="mf_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.45" armature="0.004" />
         <geom type="mesh" rgba="1 1 1 1" mesh="mf_proximal_link" />
         <body name="mf_distal_link" pos="0 0.0405988 -0.00577519" gravcomp="1">
           <inertial pos="0.00709507 4.45296e-05 -0.00290427" quat="0 0.707107 0 0.707107" mass="0.03118308" diaginertia="1.56527e-06 1.56324e-06 9.99018e-7" />
@@ -82,7 +82,7 @@
       </body>
       <body name="rf_proximal_link" pos="-0.0185369 0.108588 0.0302829" quat="0.99939 -0.000281476 -0.00829235 0.0339234" gravcomp="1">
         <inertial pos="0.00759942 0.0173278 -0.00332764" quat="0.493096 0.506465 -0.506756 0.493506" mass="0.0293531" diaginertia="2.37515e-07 2.3259e-07 1.02729e-07" />
-        <joint name="rf_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.2" armature="0.001" />
+        <joint name="rf_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.45" armature="0.004" />
         <geom type="mesh" rgba="1 1 1 1" mesh="rf_proximal_link" />
         <body name="rf_distal_link" pos="0 0.0355965 -0.00480918" gravcomp="1">
           <inertial pos="0.00756929 -0.000209135 -0.00288247" quat="0 0.707107 0 0.707107" mass="0.03118308" diaginertia="1.56479e-06 1.56372e-06 9.99018e-7" />
@@ -97,7 +97,7 @@
       </body>
       <body name="lf_proximal_link" pos="-0.0384957 0.104919 0.0261462" quat="0.996858 -0.00313552 -0.0577473 0.0541267" gravcomp="1">
         <inertial pos="0.00760071 0.015675 -0.0029499" quat="0.500638 0.499004 -0.49936 0.500995" mass="0.0277912" diaginertia="1.82316e-07 1.76548e-07 9.42052e-08" />
-        <joint name="lf_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.2" armature="0.001" />
+        <joint name="lf_proximal_link" pos="0 0 0" axis="-1 0 0" ref="0.3" damping="0.45" armature="0.004" />
         <geom type="mesh" rgba="1 1 1 1" mesh="lf_proximal_link" />
         <body name="lf_distal_link" pos="0 0.0315914 -0.00464655" gravcomp="1">
           <inertial pos="0.00709503 -0.000147589 -0.00285785" quat="-0.150667 0.690869 -0.150667 0.690869" mass="0.03118308" diaginertia="1.56576e-06 1.56276e-06 9.99018e-7" />
@@ -112,11 +112,11 @@
       </body>
       <body name="th_root_link" pos="0.019251 0.028856 -0.012557" quat="-3.67321e-06 1 -0.000158505 5.82221e-10" gravcomp="1">
         <inertial pos="0.00299514 -0.0205271 0.00582141" quat="0.74851 0.441785 0.0250246 0.493896" mass="0.0708321" diaginertia="0.000154618 0.000128515 6.37189e-05" />
-        <joint name="th_root_link" pos="0 0 0" axis="0 -1 0" ref="0.75" damping="0.2" armature="0.001" />
+        <joint name="th_root_link" pos="0 0 0" axis="0 -1 0" ref="0.75" damping="0.45" armature="0.004" />
         <geom type="mesh" rgba="1 1 1 1" mesh="th_root_link" />
         <body name="th_slider_connecting_link" pos="0.0147446 -0.0365663 0.00667895" quat="4.68762e-05 0.399399 -0.000107535 0.916777" gravcomp="1">
           <inertial pos="0.0079 0.00390438 0.00385953" quat="0.38535 0.922771 0 0" mass="0.886531" diaginertia="1.54015e-09 1.3854e-09 1.64213e-10" />
-          <joint name="th_slider_connecting_link" pos="0 0 0" axis="-1 0 0" ref="0.55" damping="0.2" armature="0.001" />
+          <joint name="th_slider_connecting_link" pos="0 0 0" axis="-1 0 0" ref="0.55" damping="0.45" armature="0.004" />
           <geom type="mesh" rgba="1 1 1 1" mesh="th_slider_connecting_link" />
           <body name="th_slider_link" pos="0 0.0078087 0.0077191" quat="0.707107 -6.94115e-05 -0.707107 6.94115e-05" gravcomp="1">
             <inertial pos="0.00146645 0.0143829 -0.00789993" quat="0.70608 0.70608 -0.038099 -0.038099" mass="0.03164989" diaginertia="1.74468e-07 1.47922e-07 3.02562e-08" />
@@ -205,11 +205,11 @@
     <position name="hand_roll" joint="hand_roll" kp="120" ctrlrange="-0.8 0.8" ctrllimited="true" />
     <position name="hand_pitch" joint="hand_pitch" kp="120" ctrlrange="-0.8 0.8" ctrllimited="true" />
     <position name="hand_yaw" joint="hand_yaw" kp="120" ctrlrange="-1.2 1.2" ctrllimited="true" />
-    <position name="index_finger" joint="if_proximal_link" kp="1" ctrlrange="0 1.44" ctrllimited="true" />
-    <position name="middle_finger" joint="mf_proximal_link" kp="1" ctrlrange="0 1.44" ctrllimited="true" />
-    <position name="ring_finger" joint="rf_proximal_link" kp="1" ctrlrange="0 1.44" ctrllimited="true" />
-    <position name="little_finger" joint="lf_proximal_link" kp="1" ctrlrange="0 1.44" ctrllimited="true" />
-    <position name="thumb_root" joint="th_root_link" kp="1" ctrlrange="0 1.57" ctrllimited="true" />
-    <position name="thumb" joint="th_slider_connecting_link" kp="1" ctrlrange="0 0.7" ctrllimited="true" />
+    <position name="index_finger" joint="if_proximal_link" kp="12" ctrlrange="0 1.44" ctrllimited="true" />
+    <position name="middle_finger" joint="mf_proximal_link" kp="12" ctrlrange="0 1.44" ctrllimited="true" />
+    <position name="ring_finger" joint="rf_proximal_link" kp="12" ctrlrange="0 1.44" ctrllimited="true" />
+    <position name="little_finger" joint="lf_proximal_link" kp="12" ctrlrange="0 1.44" ctrllimited="true" />
+    <position name="thumb_root" joint="th_root_link" kp="10" ctrlrange="0 1.57" ctrllimited="true" />
+    <position name="thumb" joint="th_slider_connecting_link" kp="10" ctrlrange="0 0.7" ctrllimited="true" />
   </actuator>
 </mujoco>
