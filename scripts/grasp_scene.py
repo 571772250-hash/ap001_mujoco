@@ -13,14 +13,15 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
 if VENV_PYTHON.exists() and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
     os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), *sys.argv])
 
+import numpy as np
 import mujoco
 import mujoco.viewer
+import matplotlib.pyplot as plt
 
 
 SOURCE_HAND_XML = REPO_ROOT / "assets" / "AP001" / "model" / "rohand_gen2_left.xml"
@@ -68,6 +69,21 @@ CONTACT_ATTRS = {
     "margin": "0.0002",
     "gap": "0",
 }
+TACTILE_SITES = {
+    "index": ("if_distal_link", "0.007 0.05 -0.01", "0.03"),
+    "middle": ("mf_distal_link", "0.007 0.06 -0.01", "0.03"),
+    "ring": ("rf_distal_link", "0.007 0.05 -0.01", "0.03"),
+    "little": ("lf_distal_link", "0.007 0.04 -0.01", "0.03"),
+    "thumb": ("th_distal_link", "0.007 0.000 -0.020", "0.03"),
+}
+# TACTILE_SITES = {
+#     "index": ("if_distal_link", "0.007 0.026 -0.003", "0.012"),
+#     "middle": ("mf_distal_link", "0.007 0.030 -0.003", "0.012"),
+#     "ring": ("rf_distal_link", "0.007 0.026 -0.003", "0.012"),
+#     "little": ("lf_distal_link", "0.007 0.022 -0.003", "0.011"),
+#     "thumb": ("th_distal_link", "0.007 0.000 -0.020", "0.012"),
+# }
+TACTILE_SENSOR_NAMES = tuple(f"{name}_touch" for name in TACTILE_SITES)
 
 
 def parse_args() -> argparse.Namespace:
@@ -136,6 +152,46 @@ def stabilize_hand_tree(hand_root: ET.Element) -> None:
         else:
             joint.set("damping", max_float_text(joint.get("damping"), 0.2))
             joint.set("armature", max_float_text(joint.get("armature"), 0.001))
+
+
+def add_tactile_sites(worldbody: ET.Element) -> None:
+    for finger_name, (body_name, pos, size) in TACTILE_SITES.items():
+        body = find_body(worldbody, body_name)
+        if body is None:
+            raise ValueError(f"Fingertip body not found for tactile site: {body_name}")
+
+        ET.SubElement(
+            body,
+            "site",
+            {
+                "name": f"{finger_name}_tip_touch_site",
+                "type": "sphere",
+                "pos": pos,
+                "size": size,
+                "rgba": "1 0.15 0.05 0.45",
+            },
+        )
+
+
+def find_body(root: ET.Element, name: str) -> ET.Element | None:
+    for body in root.findall(".//body"):
+        if body.get("name") == name:
+            return body
+    return None
+
+
+def add_tactile_sensors(scene: ET.Element) -> None:
+    sensor = ET.SubElement(scene, "sensor")
+    for finger_name in TACTILE_SITES:
+        ET.SubElement(
+            sensor,
+            "touch",
+            {
+                "name": f"{finger_name}_touch",
+                "site": f"{finger_name}_tip_touch_site",
+            },
+        )
+
 
 def max_float_text(current: str | None, minimum: float) -> str:
     try:
@@ -298,6 +354,7 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
     ET.SubElement(hand_mount, "joint", {"name": "hand_yaw", "type": "hinge", "axis": "0 0 1", "damping": "55", "armature": "0.08"})
     source_worldbody = hand_root.find("worldbody")
     if source_worldbody is not None:
+        add_tactile_sites(source_worldbody)
         for child in list(source_worldbody):
             hand_mount.append(child)
 
@@ -316,6 +373,7 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
                 child.set("kp", FINGER_ACTUATOR_KP[child.get("name")])
             actuator.append(child)
 
+    add_tactile_sensors(scene)
     indent(scene)
     scene_path.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(scene).write(scene_path, encoding="utf-8", xml_declaration=True)
@@ -363,6 +421,48 @@ def set_actuated_joint_qpos(
     data.qpos[qpos_id] = value
 
 
+class TactilePlot:
+    def __init__(self, model: mujoco.MjModel) -> None:
+        self.sensor_ids = []
+        self.labels = []
+        for sensor_name in TACTILE_SENSOR_NAMES:
+            sensor_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
+            if sensor_id < 0:
+                raise ValueError(f"Tactile sensor not found: {sensor_name}")
+            self.sensor_ids.append(sensor_id)
+            self.labels.append(sensor_name.removesuffix("_touch"))
+
+        plt.ion()
+        self.fig, self.ax = plt.subplots(figsize=(7, 4))
+        self.bars = self.ax.bar(self.labels, np.zeros(len(self.labels)), color="#2f8fd8")
+        self.ax.set_title("AP001 Fingertip Normal Force")
+        self.ax.set_ylabel("Force (N)")
+        self.ax.set_ylim(0, 5)
+        self.ax.grid(axis="y", alpha=0.25)
+        self.fig.tight_layout()
+        self.last_update = 0.0
+
+    def update(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
+        now = time.time()
+        if now - self.last_update < 0.03:
+            return
+
+        forces = []
+        for sensor_id in self.sensor_ids:
+            adr = model.sensor_adr[sensor_id]
+            dim = model.sensor_dim[sensor_id]
+            forces.append(float(np.linalg.norm(data.sensordata[adr : adr + dim])))
+
+        max_force = max(5.0, max(forces) * 1.25 if forces else 5.0)
+        self.ax.set_ylim(0, max_force)
+        for bar, force in zip(self.bars, forces):
+            bar.set_height(force)
+
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+        self.last_update = now
+
+
 def main() -> None:
     args = parse_args()
     scene_path = args.scene.expanduser().resolve()
@@ -374,6 +474,7 @@ def main() -> None:
     model = mujoco.MjModel.from_xml_path(str(scene_path))
     data = mujoco.MjData(model)
     set_initial_controls(model, data)
+    tactile_plot = TactilePlot(model)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         # 设置为默认自由相机模式
@@ -381,6 +482,7 @@ def main() -> None:
 
         while viewer.is_running():
             mujoco.mj_step(model, data)
+            tactile_plot.update(model, data)
             viewer.sync()
             time.sleep(model.opt.timestep)
 
