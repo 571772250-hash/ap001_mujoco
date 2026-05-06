@@ -134,7 +134,7 @@
                 <inertial pos="0.0068168 -0.000637415 -0.011298" quat="0 0.707107 0 0.707107" mass="0.182314" diaginertia="1.23939e-05 1.23781e-05 6.36213e-6" />
                 <joint name="th_distal_link" pos="0 0 0" axis="-1 0 0" damping="0.2" armature="0.001" />
                 <geom type="mesh" rgba="1 1 1 1" mesh="th_distal_link" contype="1" conaffinity="1" condim="4" friction="2.5 0.08 0.008" solimp="0.995 0.999 0.0005" solref="0.004 1" margin="0.0002" gap="0" />
-                <site name="thumb_tip_touch_site" type="sphere" pos="0.007 0.01042 -0.00172" size="0.015" rgba="1 0.15 0.05 0.45" />
+                <site name="thumb_tip_touch_site" type="sphere" pos="0.007 0.01042 -0.00172" size="0.016" rgba="1 0.15 0.05 0.45" />
               </body>
             </body>
             <body name="th_proximal_link" pos="0.000251708 0.00254797 -0.0009" quat="0.625198 0.244895 -0.270279 -0.690003" gravcomp="1">
