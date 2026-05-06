@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Launch a manual AP001 left-hand grasp scene for MuJoCo Control tuning."""
+"""Launch a manual AP001 left-hand grasp scene for MuJoCo Control tuning.
+python /mnt/DOCUMENT/ap001_mujoco/scripts/grasp_scene.py
+
+"""
 
 from __future__ import annotations
 
@@ -31,7 +34,14 @@ FINGER_ACTUATORS = (
     "thumb_root",
     "thumb",
 )
-OPEN_FRACTIONS = (0.04, 0.04, 0.04, 0.04, 0.16, 0.08)
+INITIAL_FINGER_CTRL = {
+    "index_finger": 0.0,
+    "middle_finger": 0.0,
+    "ring_finger": 0.0,
+    "little_finger": 0.0,
+    "thumb_root": 1.57,
+    "thumb": 0.0,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,14 +87,39 @@ def retarget_mesh_paths(hand_root: ET.Element, source_hand_xml: Path, scene_path
             mesh.set("file", os.path.relpath(mesh_path, scene_dir))
 
 
+def stabilize_hand_tree(hand_root: ET.Element) -> None:
+    worldbody = hand_root.find("worldbody")
+    if worldbody is None:
+        return
+
+    for body in worldbody.findall(".//body"):
+        body.set("gravcomp", "1")
+
+    for joint in worldbody.findall(".//joint"):
+        if joint.get("type") == "slide":
+            joint.set("damping", max_float_text(joint.get("damping"), 0.3))
+            joint.set("armature", max_float_text(joint.get("armature"), 0.002))
+        else:
+            joint.set("damping", max_float_text(joint.get("damping"), 0.2))
+            joint.set("armature", max_float_text(joint.get("armature"), 0.001))
+
+
+def max_float_text(current: str | None, minimum: float) -> str:
+    try:
+        value = float(current) if current is not None else minimum
+    except ValueError:
+        value = minimum
+    return f"{max(value, minimum):g}"
+
+
 def add_hand_pose_actuators(actuator: ET.Element) -> None:
     pose_actuators = (
-        ("hand_x", "hand_x", "80", "-0.08 0.08"),
-        ("hand_y", "hand_y", "80", "0.02 0.20"),
-        ("hand_z", "hand_z", "80", "-0.01 0.12"),
-        ("hand_roll", "hand_roll", "20", "-0.8 0.8"),
-        ("hand_pitch", "hand_pitch", "20", "-0.8 0.8"),
-        ("hand_yaw", "hand_yaw", "20", "-1.2 1.2"),
+        ("hand_x", "hand_x", "500", "-0.50 0.50"),
+        ("hand_y", "hand_y", "500", "-0.40 0.60"),
+        ("hand_z", "hand_z", "500", "-0.20 0.80"),
+        ("hand_roll", "hand_roll", "120", "-0.8 0.8"),
+        ("hand_pitch", "hand_pitch", "120", "-0.8 0.8"),
+        ("hand_yaw", "hand_yaw", "120", "-1.2 1.2"),
     )
     for name, joint, kp, ctrlrange in pose_actuators:
         ET.SubElement(
@@ -104,6 +139,7 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
     hand_tree = ET.parse(source_hand_xml)
     hand_root = hand_tree.getroot()
     retarget_mesh_paths(hand_root, source_hand_xml, scene_path)
+    stabilize_hand_tree(hand_root)
 
     compiler = hand_root.find("compiler")
     if compiler is None:
@@ -112,7 +148,17 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
 
     scene = ET.Element("mujoco", {"model": "ap001_left_manual_grasp_scene"})
     scene.append(compiler)
-    ET.SubElement(scene, "option", {"timestep": "0.002", "gravity": "0 0 -9.81"})
+    ET.SubElement(
+        scene,
+        "option",
+        {
+            "timestep": "0.002",
+            "gravity": "0 0 -9.81",
+            "integrator": "implicitfast",
+            "iterations": "100",
+            "ls_iterations": "50",
+        },
+    )
     ET.SubElement(scene, "statistic", {"center": "0 0.1 0.03", "extent": "0.35"})
 
     visual = ET.SubElement(scene, "visual")
@@ -198,12 +244,12 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
     )
 
     hand_mount = ET.SubElement(worldbody, "body", {"name": "hand_mount", "pos": "0 0 0"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_x", "type": "slide", "axis": "1 0 0", "damping": "2"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_y", "type": "slide", "axis": "0 1 0", "damping": "2"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_z", "type": "slide", "axis": "0 0 1", "damping": "2"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_roll", "type": "hinge", "axis": "1 0 0", "damping": "0.5"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_pitch", "type": "hinge", "axis": "0 1 0", "damping": "0.5"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_yaw", "type": "hinge", "axis": "0 0 1", "damping": "0.5"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_x", "type": "slide", "axis": "1 0 0", "damping": "220", "armature": "0.25"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_y", "type": "slide", "axis": "0 1 0", "damping": "220", "armature": "0.25"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_z", "type": "slide", "axis": "0 0 1", "damping": "220", "armature": "0.25"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_roll", "type": "hinge", "axis": "1 0 0", "damping": "55", "armature": "0.08"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_pitch", "type": "hinge", "axis": "0 1 0", "damping": "55", "armature": "0.08"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_yaw", "type": "hinge", "axis": "0 0 1", "damping": "55", "armature": "0.08"})
     source_worldbody = hand_root.find("worldbody")
     if source_worldbody is not None:
         for child in list(source_worldbody):
@@ -228,25 +274,45 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
 
 
 def set_initial_controls(model: mujoco.MjModel, data: mujoco.MjData) -> None:
-    # 初始手的位姿设置
+    # 初始手的位姿设置（根据可视化调整）
     initial_ctrl = {
-        "hand_x": 0.0,      # X轴位置 (左右方向)
-        "hand_y": 0.02,     # Y轴位置 (前后方向)
-        "hand_z": 0.0,      # Z轴位置 (上下方向)
-        "hand_roll": 0.0,   # 滚转角 (绕X轴旋转)
-        "hand_pitch": 0.0,  # 俯仰角 (绕Y轴旋转)
-        "hand_yaw": 0.0,    # 偏航角 (绕Z轴旋转)
+        "hand_x": 0.0,    # X轴位置 (左右方向)
+        "hand_y": 0.03,    # Y轴位置 (前后方向)
+        "hand_z": 0.1,    # Z轴位置 (上下方向)
+        "hand_roll": -0.512, # 滚转角 (绕X轴旋转)
+        "hand_pitch": 0.0,   # 俯仰角 (绕Y轴旋转)
+        "hand_yaw": 0.0,     # 偏航角 (绕Z轴旋转)
     }
     for name, value in initial_ctrl.items():
         actuator_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
         if actuator_id >= 0:
             data.ctrl[actuator_id] = value
+            set_actuated_joint_qpos(model, data, actuator_id, value)
 
-    for name, fraction in zip(FINGER_ACTUATORS, OPEN_FRACTIONS):
+    for name in FINGER_ACTUATORS:
         actuator_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
         if actuator_id >= 0:
             low, high = model.actuator_ctrlrange[actuator_id]
-            data.ctrl[actuator_id] = low + fraction * (high - low)
+            value = INITIAL_FINGER_CTRL[name]
+            value = min(high, max(low, value))
+            data.ctrl[actuator_id] = value
+            set_actuated_joint_qpos(model, data, actuator_id, value)
+
+    mujoco.mj_forward(model, data)
+
+
+def set_actuated_joint_qpos(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    actuator_id: int,
+    value: float,
+) -> None:
+    joint_id = model.actuator_trnid[actuator_id, 0]
+    if joint_id < 0:
+        return
+
+    qpos_id = model.jnt_qposadr[joint_id]
+    data.qpos[qpos_id] = value
 
 
 def main() -> None:
@@ -262,10 +328,8 @@ def main() -> None:
     set_initial_controls(model, data)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        camera_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "grasp_view")
-        if camera_id >= 0:
-            viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
-            viewer.cam.fixedcamid = camera_id
+        # 设置为默认自由相机模式
+        viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
 
         while viewer.is_running():
             mujoco.mj_step(model, data)
