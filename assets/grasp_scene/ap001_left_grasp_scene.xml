@@ -1,0 +1,32 @@
+<mujoco model="ap001_left_grasp_scene">
+  <include file="../AP001/model/rohand_gen2_left.xml"/>
+
+  <statistic center="0 0.09 0.04" extent="0.35"/>
+
+  <visual>
+    <quality shadowsize="2048"/>
+    <headlight diffuse="0.7 0.7 0.7" ambient="0.25 0.25 0.25" specular="0.2 0.2 0.2"/>
+    <map znear="0.01"/>
+  </visual>
+
+  <asset>
+    <texture name="table_grid" type="2d" builtin="checker" width="256" height="256"
+      rgb1="0.78 0.80 0.76" rgb2="0.58 0.62 0.58"/>
+    <material name="table_mat" texture="table_grid" texrepeat="5 5" rgba="0.72 0.74 0.70 1"/>
+    <material name="cube_mat" rgba="0.15 0.50 0.88 1"/>
+  </asset>
+
+  <worldbody>
+    <light name="key_light" pos="-0.35 -0.25 0.6" dir="0.6 0.6 -1" directional="true"/>
+    <camera name="grasp_view" pos="0.22 -0.24 0.22" xyaxes="0.73 0.68 0 -0.32 0.34 0.88"/>
+
+    <geom name="table_top" type="box" pos="0 0.1 -0.045" size="0.22 0.22 0.015"
+      material="table_mat" contype="1" conaffinity="1"/>
+
+    <body name="grasp_cube" pos="0.001 0.145 -0.005">
+      <freejoint name="cube_freejoint"/>
+      <geom name="grasp_cube_geom" type="box" size="0.025 0.025 0.025"
+        material="cube_mat" mass="0.08" friction="1.2 0.02 0.002"/>
+    </body>
+  </worldbody>
+</mujoco>
