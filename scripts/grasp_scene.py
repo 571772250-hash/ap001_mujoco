@@ -228,13 +228,14 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
 
 
 def set_initial_controls(model: mujoco.MjModel, data: mujoco.MjData) -> None:
+    # 初始手的位姿设置
     initial_ctrl = {
-        "hand_x": 0.0,
-        "hand_y": 0.02,
-        "hand_z": 0.0,
-        "hand_roll": 0.0,
-        "hand_pitch": 0.0,
-        "hand_yaw": 0.0,
+        "hand_x": 0.0,      # X轴位置 (左右方向)
+        "hand_y": 0.02,     # Y轴位置 (前后方向)
+        "hand_z": 0.0,      # Z轴位置 (上下方向)
+        "hand_roll": 0.0,   # 滚转角 (绕X轴旋转)
+        "hand_pitch": 0.0,  # 俯仰角 (绕Y轴旋转)
+        "hand_yaw": 0.0,    # 偏航角 (绕Z轴旋转)
     }
     for name, value in initial_ctrl.items():
         actuator_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
