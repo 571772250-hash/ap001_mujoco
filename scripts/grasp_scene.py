@@ -58,6 +58,16 @@ FINGER_JOINTS = {
     "th_root_link",
     "th_slider_connecting_link",
 }
+CONTACT_ATTRS = {
+    "contype": "1",
+    "conaffinity": "1",
+    "condim": "4",
+    "friction": "2.5 0.08 0.008",
+    "solimp": "0.995 0.999 0.0005",
+    "solref": "0.004 1",
+    "margin": "0.0002",
+    "gap": "0",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -111,6 +121,9 @@ def stabilize_hand_tree(hand_root: ET.Element) -> None:
     for body in worldbody.findall(".//body"):
         body.set("gravcomp", "1")
 
+    for geom in worldbody.findall(".//geom"):
+        geom.attrib.update(CONTACT_ATTRS)
+
     for joint in worldbody.findall(".//joint"):
         if joint.get("name") in FINGER_JOINTS:
             joint.set("damping", "0.45")
@@ -123,7 +136,6 @@ def stabilize_hand_tree(hand_root: ET.Element) -> None:
         else:
             joint.set("damping", max_float_text(joint.get("damping"), 0.2))
             joint.set("armature", max_float_text(joint.get("armature"), 0.001))
-
 
 def max_float_text(current: str | None, minimum: float) -> str:
     try:
@@ -247,6 +259,12 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
             "material": "table_mat",
             "contype": "1",
             "conaffinity": "1",
+            "condim": "4",
+            "friction": "1.5 0.05 0.005",
+            "solimp": "0.995 0.999 0.0005",
+            "solref": "0.004 1",
+            "margin": "0.0002",
+            "gap": "0",
         },
     )
     cube = ET.SubElement(worldbody, "body", {"name": "grasp_cube", "pos": "0.001 0.145 -0.005"})
@@ -260,7 +278,14 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
             "size": "0.025 0.025 0.025",
             "material": "cube_mat",
             "mass": "0.08",
-            "friction": "1.2 0.02 0.002",
+            "contype": "1",
+            "conaffinity": "1",
+            "condim": "4",
+            "friction": "3.0 0.1 0.01",
+            "solimp": "0.995 0.999 0.0005",
+            "solref": "0.003 1",
+            "margin": "0.0002",
+            "gap": "0",
         },
     )
 
