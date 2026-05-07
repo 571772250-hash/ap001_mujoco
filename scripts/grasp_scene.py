@@ -61,6 +61,19 @@ FINGER_ACTUATOR_KP = {
 }
 SIM_STEPS_PER_RENDER = 5
 PLOT_UPDATE_INTERVAL = 0.12
+FORCE_CONTROL_FINGERS = ("index", "middle", "ring")
+FORCE_SENSOR_BY_FINGER = {finger: f"{finger}_touch" for finger in FORCE_CONTROL_FINGERS}
+ACTUATOR_BY_FORCE_FINGER = {
+    "index": "index_finger",
+    "middle": "middle_finger",
+    "ring": "ring_finger",
+}
+TARGET_GRASP_FORCE = 3.0
+FORCE_TOLERANCE = 0.35
+FINGER_CLOSE_RATE = 0.18
+FINGER_FORCE_GAIN = 0.035
+LIFT_HEIGHT = 0.30
+LIFT_RATE = 0.04
 FINGER_JOINTS = {
     "if_proximal_link",
     "mf_proximal_link",
@@ -82,11 +95,11 @@ CONTACT_ATTRS = {
 # 触觉传感器位点配置
 # 键: 手指名称, 值: (所属连杆名称, 传感器位置偏移, 传感器尺寸)
 TACTILE_SITES = {
-    "index": ("if_distal_link", "0.007 0.03482 -0.02152", "0.014"),
+    "index": ("if_distal_link", "0.007 0.03482 -0.02152", "0.015"),
     "middle": ("mf_distal_link", "0.007 0.03726 -0.02346", "0.0125"),
     "ring": ("rf_distal_link", "0.007 0.03349 -0.0235", "0.015"),
     "little": ("lf_distal_link", "0.007 0.02295 -0.01689", "0.0125"),
-    "thumb": ("th_distal_link", "0.007 0.01042 -0.00172", "0.016"),
+    "thumb": ("th_distal_link", "0.007 0.01042 -0.00172", "0.0145"),
 }
 # TACTILE_SITES = {
 #     "index": ("if_distal_link", "0.007 0.026 -0.003", "0.012"),
@@ -114,6 +127,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=SOURCE_HAND_XML,
         help=f"Source AP001 left-hand XML. Default: {SOURCE_HAND_XML}",
+    )
+    parser.add_argument(
+        "--manual",
+        action="store_true",
+        help="Disable the automatic three-finger grasp and lift controller.",
     )
     return parser.parse_args()
 
@@ -351,7 +369,7 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
             "contype": "1",
             "conaffinity": "1",
             "condim": "4",
-            "friction": "3.0 0.1 0.01",
+            "friction": "0.8 0.02 0.002",
             "solimp": "0.995 0.999 0.0005",
             "solref": "0.003 1",
             "margin": "0.0002",
@@ -567,6 +585,93 @@ class GraspStatePlot:
         return float(np.linalg.norm(data.sensordata[adr : adr + dim]))
 
 
+class ThreeFingerGraspController:
+    def __init__(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
+        self.model = model
+        self.finger_actuator_ids = {
+            finger: self.required_actuator_id(actuator_name)
+            for finger, actuator_name in ACTUATOR_BY_FORCE_FINGER.items()
+        }
+        self.sensor_ids = {
+            finger: self.required_sensor_id(sensor_name)
+            for finger, sensor_name in FORCE_SENSOR_BY_FINGER.items()
+        }
+        self.hand_z_actuator_id = self.required_actuator_id("hand_z")
+        self.initial_hand_z = float(data.ctrl[self.hand_z_actuator_id])
+        self.target_hand_z = min(
+            self.model.actuator_ctrlrange[self.hand_z_actuator_id, 1],
+            self.initial_hand_z + LIFT_HEIGHT,
+        )
+        self.phase = "closing"
+
+    def required_actuator_id(self, name: str) -> int:
+        actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+        if actuator_id < 0:
+            raise ValueError(f"Actuator not found: {name}")
+        return actuator_id
+
+    def required_sensor_id(self, name: str) -> int:
+        sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, name)
+        if sensor_id < 0:
+            raise ValueError(f"Touch sensor not found: {name}")
+        return sensor_id
+
+    def update(self, data: mujoco.MjData) -> None:
+        timestep = float(self.model.opt.timestep)
+        forces = self.finger_forces(data)
+
+        if self.phase == "closing":
+            self.close_until_contact(data, forces, timestep)
+            if all(force >= TARGET_GRASP_FORCE - FORCE_TOLERANCE for force in forces.values()):
+                self.phase = "lifting"
+        else:
+            self.regulate_force(data, forces, timestep)
+            self.lift_hand(data, timestep)
+
+    def finger_forces(self, data: mujoco.MjData) -> dict[str, float]:
+        return {
+            finger: GraspStatePlot.force_value(self.model, data, sensor_id)
+            for finger, sensor_id in self.sensor_ids.items()
+        }
+
+    def close_until_contact(
+        self,
+        data: mujoco.MjData,
+        forces: dict[str, float],
+        timestep: float,
+    ) -> None:
+        for finger, actuator_id in self.finger_actuator_ids.items():
+            if forces[finger] < TARGET_GRASP_FORCE - FORCE_TOLERANCE:
+                self.add_ctrl(data, actuator_id, FINGER_CLOSE_RATE * timestep)
+            else:
+                self.add_ctrl(data, actuator_id, -0.25 * FINGER_CLOSE_RATE * timestep)
+
+    def regulate_force(
+        self,
+        data: mujoco.MjData,
+        forces: dict[str, float],
+        timestep: float,
+    ) -> None:
+        for finger, actuator_id in self.finger_actuator_ids.items():
+            force_error = TARGET_GRASP_FORCE - forces[finger]
+            delta = FINGER_FORCE_GAIN * force_error * timestep
+            self.add_ctrl(data, actuator_id, delta)
+
+    def lift_hand(self, data: mujoco.MjData, timestep: float) -> None:
+        if data.ctrl[self.hand_z_actuator_id] >= self.target_hand_z:
+            data.ctrl[self.hand_z_actuator_id] = self.target_hand_z
+            return
+
+        data.ctrl[self.hand_z_actuator_id] = min(
+            self.target_hand_z,
+            data.ctrl[self.hand_z_actuator_id] + LIFT_RATE * timestep,
+        )
+
+    def add_ctrl(self, data: mujoco.MjData, actuator_id: int, delta: float) -> None:
+        low, high = self.model.actuator_ctrlrange[actuator_id]
+        data.ctrl[actuator_id] = min(high, max(low, data.ctrl[actuator_id] + delta))
+
+
 def main() -> None:
     args = parse_args()
     scene_path = args.scene.expanduser().resolve()
@@ -580,6 +685,7 @@ def main() -> None:
     set_initial_controls(model, data)
     reference_data = make_zero_hand_reference_data(model)
     tactile_plot = GraspStatePlot(model, data, reference_data)
+    grasp_controller = None if args.manual else ThreeFingerGraspController(model, data)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         # 设置为默认自由相机模式
@@ -587,6 +693,8 @@ def main() -> None:
 
         while viewer.is_running():
             for _ in range(SIM_STEPS_PER_RENDER):
+                if grasp_controller is not None:
+                    grasp_controller.update(data)
                 mujoco.mj_step(model, data)
             tactile_plot.update(model, data)
             viewer.sync()

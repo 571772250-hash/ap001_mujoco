@@ -26,7 +26,7 @@
     <body name="grasp_cube" pos="0.001 0.145 -0.005">
       <freejoint name="cube_freejoint"/>
       <geom name="grasp_cube_geom" type="box" size="0.025 0.025 0.025"
-        material="cube_mat" mass="0.08" friction="1.2 0.02 0.002"/>
+        material="cube_mat" mass="0.125" friction="0.8 0.02 0.002"/>
     </body>
   </worldbody>
 </mujoco>
