@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Launch a manual AP001 left-hand grasp scene for MuJoCo Control tuning.
-python /mnt/DOCUMENT/ap001_mujoco/scripts/grasp_scene.py
+"""Launch an AP001 grasp scene with lightweight MPC force tracking.
+
+python /mnt/DOCUMENT/ap001_mujoco/scripts/grasp_scene_mpc.py
 
 """
 
@@ -26,7 +27,7 @@ import matplotlib.pyplot as plt
 
 SOURCE_HAND_XML = REPO_ROOT / "assets" / "AP001" / "model" / "rohand_gen2_left.xml"
 SCENE_DIR = REPO_ROOT / "assets" / "grasp_scene"
-DEFAULT_SCENE_PATH = SCENE_DIR / "ap001_left_grasp_manual_scene.generated.xml"
+DEFAULT_SCENE_PATH = SCENE_DIR / "ap001_left_grasp_mpc_scene.generated.xml"
 FINGER_ACTUATORS = (
     "index_finger",
     "middle_finger",
@@ -74,13 +75,31 @@ TARGET_GRASP_FORCE = 1.0
 # 允许的力误差范围，单位 N；闭合阶段达到 TARGET_GRASP_FORCE - FORCE_TOLERANCE 后进入抓稳/抬升逻辑。
 FORCE_TOLERANCE = 0.1
 # 手指闭合速度，单位约为 rad/s；数值越大，手指越快闭合，但也更容易冲过目标力。
-FINGER_CLOSE_RATE = 0.18
-# 力反馈比例增益；数值越大，接触力误差修正越快，但过大可能导致振荡。
-FINGER_FORCE_GAIN = 0.035
+FINGER_CLOSE_RATE = 0.10
 # 抓稳后基座上下循环运动的高度差，单位 m；0.30 表示上下行程 30 cm。
 LIFT_HEIGHT = 0.30
 # 末端执行器上下运动的峰值加速度，单位 m/s^2；用于生成平滑循环抬升轨迹。
 END_EFFECTOR_MAX_ACCEL = 1.0
+# MPC 预测步数；MPC_HORIZON * MPC_DT 是预测窗口长度。
+MPC_HORIZON = 18
+# MPC 控制周期，单位 s；不是 MuJoCo timestep，而是每隔多久重算一次控制量。
+MPC_DT = 0.03
+# 每个 MPC 周期允许的手指位置增量候选，单位 rad。
+MPC_DELTA_CANDIDATES = (-0.0015, -0.00075, 0.0, 0.00075, 0.0015)
+# 预测力误差权重；越大越重视力跟踪。
+MPC_FORCE_WEIGHT = 1.0
+# 控制增量权重；越大越不愿意大幅改变手指位置。
+MPC_CTRL_WEIGHT = 0.12
+# 控制平滑权重；越大越抑制相邻控制动作突变。
+MPC_SMOOTH_WEIGHT = 0.55
+# 初始局部力-位置增益，单位约 N/rad；运行中会用传感器数据在线估计。
+MPC_FORCE_GAIN_INIT = 8.0
+# 末端加速度对接触力的简化扰动增益；第一版默认保守设 0。
+MPC_ACCEL_GAIN_INIT = 0.0
+# 在线估计力-位置增益的更新率。
+MPC_GAIN_UPDATE_RATE = 0.02
+# 触觉力低通滤波系数；越接近 1 越平滑，响应也越慢。
+FORCE_FILTER_ALPHA = 0.88
 FINGER_JOINTS = {
     "if_proximal_link",
     "mf_proximal_link",
@@ -121,7 +140,7 @@ TACTILE_SITE_NAMES = tuple(f"{name}_tip_touch_site" for name in TACTILE_SITES)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Open a manual AP001 cube grasp scene. Use the viewer Control panel."
+        description="Open an AP001 cube grasp scene with MPC force tracking."
     )
     parser.add_argument(
         "--scene",
@@ -138,7 +157,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--manual",
         action="store_true",
-        help="Disable the automatic three-finger grasp and lift controller.",
+        help="Disable the automatic MPC grasp and lift controller.",
     )
     return parser.parse_args()
 
@@ -273,7 +292,7 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
         compiler = ET.Element("compiler", {"angle": "radian", "autolimits": "true"})
     compiler.set("autolimits", "true")
 
-    scene = ET.Element("mujoco", {"model": "ap001_left_manual_grasp_scene"})
+    scene = ET.Element("mujoco", {"model": "ap001_left_mpc_grasp_scene"})
     scene.append(compiler)
     ET.SubElement(
         scene,
@@ -592,7 +611,67 @@ class GraspStatePlot:
         return float(np.linalg.norm(data.sensordata[adr : adr + dim]))
 
 
-class ThreeFingerGraspController:
+class FingerForceMPC:
+    def __init__(self, ctrl_range: np.ndarray) -> None:
+        self.ctrl_low = float(ctrl_range[0])
+        self.ctrl_high = float(ctrl_range[1])
+        self.force_gain = MPC_FORCE_GAIN_INIT
+        self.accel_gain = MPC_ACCEL_GAIN_INIT
+        self.prev_force: float | None = None
+        self.prev_ctrl: float | None = None
+        self.prev_delta = 0.0
+
+    def update_model(self, force: float, ctrl: float) -> None:
+        if self.prev_force is not None and self.prev_ctrl is not None:
+            delta_ctrl = ctrl - self.prev_ctrl
+            delta_force = force - self.prev_force
+            if abs(delta_ctrl) > 1e-5:
+                estimated_gain = delta_force / delta_ctrl
+                if np.isfinite(estimated_gain) and estimated_gain > 0.0:
+                    estimated_gain = float(np.clip(estimated_gain, 0.5, 80.0))
+                    self.force_gain = (
+                        (1.0 - MPC_GAIN_UPDATE_RATE) * self.force_gain
+                        + MPC_GAIN_UPDATE_RATE * estimated_gain
+                    )
+
+        self.prev_force = force
+        self.prev_ctrl = ctrl
+
+    def solve(self, force: float, ctrl: float, future_hand_accels: np.ndarray) -> float:
+        best_delta = 0.0
+        best_cost = float("inf")
+
+        for delta in MPC_DELTA_CANDIDATES:
+            predicted_force = force
+            predicted_ctrl = ctrl
+            last_delta = self.prev_delta
+            cost = 0.0
+
+            for hand_accel in future_hand_accels[:MPC_HORIZON]:
+                predicted_ctrl = float(
+                    np.clip(predicted_ctrl + delta, self.ctrl_low, self.ctrl_high)
+                )
+                predicted_force = max(
+                    0.0,
+                    predicted_force
+                    + self.force_gain * delta
+                    + self.accel_gain * hand_accel * MPC_DT,
+                )
+                force_error = predicted_force - TARGET_GRASP_FORCE
+                cost += MPC_FORCE_WEIGHT * force_error * force_error
+                cost += MPC_CTRL_WEIGHT * delta * delta
+                cost += MPC_SMOOTH_WEIGHT * (delta - last_delta) ** 2
+                last_delta = delta
+
+            if cost < best_cost:
+                best_cost = cost
+                best_delta = float(delta)
+
+        self.prev_delta = best_delta
+        return float(np.clip(ctrl + best_delta, self.ctrl_low, self.ctrl_high))
+
+
+class ThreeFingerMPCGraspController:
     def __init__(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
         self.model = model
         self.finger_actuator_ids = {
@@ -614,6 +693,12 @@ class ThreeFingerGraspController:
             END_EFFECTOR_MAX_ACCEL / max(self.lift_amplitude, 1e-6)
         )
         self.lift_start_time = 0.0
+        self.next_mpc_time = 0.0
+        self.mpcs = {
+            finger: FingerForceMPC(self.model.actuator_ctrlrange[actuator_id])
+            for finger, actuator_id in self.finger_actuator_ids.items()
+        }
+        self.filtered_forces = {finger: 0.0 for finger in self.finger_actuator_ids}
         self.phase = "closing"
 
     def required_actuator_id(self, name: str) -> int:
@@ -630,7 +715,7 @@ class ThreeFingerGraspController:
 
     def update(self, data: mujoco.MjData) -> None:
         timestep = float(self.model.opt.timestep)
-        forces = self.finger_forces(data)
+        forces = self.filtered_finger_forces(data)
 
         if self.phase == "closing":
             self.close_until_contact(data, forces, timestep)
@@ -638,14 +723,25 @@ class ThreeFingerGraspController:
                 self.lift_start_time = float(data.time)
                 self.phase = "lifting"
         else:
-            self.regulate_force(data, forces, timestep)
             self.cycle_hand_z(data)
+            if float(data.time) >= self.next_mpc_time:
+                self.regulate_force_with_mpc(data, forces)
+                self.next_mpc_time = float(data.time) + MPC_DT
 
     def finger_forces(self, data: mujoco.MjData) -> dict[str, float]:
         return {
             finger: GraspStatePlot.force_value(self.model, data, sensor_id)
             for finger, sensor_id in self.sensor_ids.items()
         }
+
+    def filtered_finger_forces(self, data: mujoco.MjData) -> dict[str, float]:
+        raw_forces = self.finger_forces(data)
+        for finger, force in raw_forces.items():
+            self.filtered_forces[finger] = (
+                FORCE_FILTER_ALPHA * self.filtered_forces[finger]
+                + (1.0 - FORCE_FILTER_ALPHA) * force
+            )
+        return dict(self.filtered_forces)
 
     def close_until_contact(
         self,
@@ -659,16 +755,18 @@ class ThreeFingerGraspController:
             else:
                 self.add_ctrl(data, actuator_id, -0.25 * FINGER_CLOSE_RATE * timestep)
 
-    def regulate_force(
-        self,
-        data: mujoco.MjData,
-        forces: dict[str, float],
-        timestep: float,
-    ) -> None:
+    def regulate_force_with_mpc(self, data: mujoco.MjData, forces: dict[str, float]) -> None:
+        future_hand_accels = self.future_hand_z_accels(float(data.time))
         for finger, actuator_id in self.finger_actuator_ids.items():
-            force_error = TARGET_GRASP_FORCE - forces[finger]
-            delta = FINGER_FORCE_GAIN * force_error * timestep
-            self.add_ctrl(data, actuator_id, delta)
+            current_ctrl = float(data.ctrl[actuator_id])
+            current_force = forces[finger]
+            mpc = self.mpcs[finger]
+            mpc.update_model(current_force, current_ctrl)
+            data.ctrl[actuator_id] = mpc.solve(
+                current_force,
+                current_ctrl,
+                future_hand_accels,
+            )
 
     def cycle_hand_z(self, data: mujoco.MjData) -> None:
         elapsed = max(0.0, float(data.time) - self.lift_start_time)
@@ -676,6 +774,18 @@ class ThreeFingerGraspController:
             self.initial_hand_z
             + self.lift_amplitude * (1.0 - np.cos(self.lift_omega * elapsed))
         )
+
+    def future_hand_z_accels(self, current_time: float) -> np.ndarray:
+        future_accels = []
+        for step in range(MPC_HORIZON):
+            elapsed = max(
+                0.0,
+                current_time - self.lift_start_time + step * MPC_DT,
+            )
+            future_accels.append(
+                self.lift_amplitude * self.lift_omega**2 * np.cos(self.lift_omega * elapsed)
+            )
+        return np.array(future_accels)
 
     def add_ctrl(self, data: mujoco.MjData, actuator_id: int, delta: float) -> None:
         low, high = self.model.actuator_ctrlrange[actuator_id]
@@ -695,7 +805,7 @@ def main() -> None:
     set_initial_controls(model, data)
     reference_data = make_zero_hand_reference_data(model)
     tactile_plot = GraspStatePlot(model, data, reference_data)
-    grasp_controller = None if args.manual else ThreeFingerGraspController(model, data)
+    grasp_controller = None if args.manual else ThreeFingerMPCGraspController(model, data)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         # 设置为默认自由相机模式
