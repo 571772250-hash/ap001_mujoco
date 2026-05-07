@@ -68,12 +68,13 @@ ACTUATOR_BY_FORCE_FINGER = {
     "middle": "middle_finger",
     "ring": "ring_finger",
 }
+# 手指额目标力调整
 TARGET_GRASP_FORCE = 3.0
 FORCE_TOLERANCE = 0.35
 FINGER_CLOSE_RATE = 0.18
 FINGER_FORCE_GAIN = 0.035
 LIFT_HEIGHT = 0.30
-LIFT_RATE = 0.04
+END_EFFECTOR_MAX_ACCEL = 1.0
 FINGER_JOINTS = {
     "if_proximal_link",
     "mf_proximal_link",
@@ -234,12 +235,12 @@ def max_float_text(current: str | None, minimum: float) -> str:
 
 def add_hand_pose_actuators(actuator: ET.Element) -> None:
     pose_actuators = (
-        ("hand_x", "hand_x", "500", "-0.50 0.50"),
-        ("hand_y", "hand_y", "500", "-0.40 0.60"),
-        ("hand_z", "hand_z", "500", "-0.20 0.80"),
-        ("hand_roll", "hand_roll", "120", "-0.8 0.8"),
-        ("hand_pitch", "hand_pitch", "120", "-0.8 0.8"),
-        ("hand_yaw", "hand_yaw", "120", "-1.2 1.2"),
+        ("hand_x", "hand_x", "5000", "-0.50 0.50"),
+        ("hand_y", "hand_y", "5000", "-0.40 0.60"),
+        ("hand_z", "hand_z", "5000", "-0.20 0.80"),
+        ("hand_roll", "hand_roll", "1200", "-0.8 0.8"),
+        ("hand_pitch", "hand_pitch", "1200", "-0.8 0.8"),
+        ("hand_yaw", "hand_yaw", "1200", "-1.2 1.2"),
     )
     for name, joint, kp, ctrlrange in pose_actuators:
         ET.SubElement(
@@ -378,12 +379,12 @@ def build_manual_scene(source_hand_xml: Path, scene_path: Path) -> None:
     )
 
     hand_mount = ET.SubElement(worldbody, "body", {"name": "hand_mount", "pos": "0 0 0"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_x", "type": "slide", "axis": "1 0 0", "damping": "220", "armature": "0.25"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_y", "type": "slide", "axis": "0 1 0", "damping": "220", "armature": "0.25"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_z", "type": "slide", "axis": "0 0 1", "damping": "220", "armature": "0.25"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_roll", "type": "hinge", "axis": "1 0 0", "damping": "55", "armature": "0.08"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_pitch", "type": "hinge", "axis": "0 1 0", "damping": "55", "armature": "0.08"})
-    ET.SubElement(hand_mount, "joint", {"name": "hand_yaw", "type": "hinge", "axis": "0 0 1", "damping": "55", "armature": "0.08"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_x", "type": "slide", "axis": "1 0 0", "damping": "1400", "armature": "1.0"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_y", "type": "slide", "axis": "0 1 0", "damping": "1400", "armature": "1.0"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_z", "type": "slide", "axis": "0 0 1", "damping": "1400", "armature": "1.0"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_roll", "type": "hinge", "axis": "1 0 0", "damping": "350", "armature": "0.35"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_pitch", "type": "hinge", "axis": "0 1 0", "damping": "350", "armature": "0.35"})
+    ET.SubElement(hand_mount, "joint", {"name": "hand_yaw", "type": "hinge", "axis": "0 0 1", "damping": "350", "armature": "0.35"})
     source_worldbody = hand_root.find("worldbody")
     if source_worldbody is not None:
         add_tactile_sites(source_worldbody)
@@ -602,6 +603,11 @@ class ThreeFingerGraspController:
             self.model.actuator_ctrlrange[self.hand_z_actuator_id, 1],
             self.initial_hand_z + LIFT_HEIGHT,
         )
+        self.lift_amplitude = 0.5 * (self.target_hand_z - self.initial_hand_z)
+        self.lift_omega = np.sqrt(
+            END_EFFECTOR_MAX_ACCEL / max(self.lift_amplitude, 1e-6)
+        )
+        self.lift_start_time = 0.0
         self.phase = "closing"
 
     def required_actuator_id(self, name: str) -> int:
@@ -623,10 +629,11 @@ class ThreeFingerGraspController:
         if self.phase == "closing":
             self.close_until_contact(data, forces, timestep)
             if all(force >= TARGET_GRASP_FORCE - FORCE_TOLERANCE for force in forces.values()):
+                self.lift_start_time = float(data.time)
                 self.phase = "lifting"
         else:
             self.regulate_force(data, forces, timestep)
-            self.lift_hand(data, timestep)
+            self.cycle_hand_z(data)
 
     def finger_forces(self, data: mujoco.MjData) -> dict[str, float]:
         return {
@@ -657,14 +664,11 @@ class ThreeFingerGraspController:
             delta = FINGER_FORCE_GAIN * force_error * timestep
             self.add_ctrl(data, actuator_id, delta)
 
-    def lift_hand(self, data: mujoco.MjData, timestep: float) -> None:
-        if data.ctrl[self.hand_z_actuator_id] >= self.target_hand_z:
-            data.ctrl[self.hand_z_actuator_id] = self.target_hand_z
-            return
-
-        data.ctrl[self.hand_z_actuator_id] = min(
-            self.target_hand_z,
-            data.ctrl[self.hand_z_actuator_id] + LIFT_RATE * timestep,
+    def cycle_hand_z(self, data: mujoco.MjData) -> None:
+        elapsed = max(0.0, float(data.time) - self.lift_start_time)
+        data.ctrl[self.hand_z_actuator_id] = (
+            self.initial_hand_z
+            + self.lift_amplitude * (1.0 - np.cos(self.lift_omega * elapsed))
         )
 
     def add_ctrl(self, data: mujoco.MjData, actuator_id: int, delta: float) -> None:

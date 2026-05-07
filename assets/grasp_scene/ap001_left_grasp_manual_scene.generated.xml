@@ -41,12 +41,12 @@
       <geom name="grasp_cube_geom" type="box" size="0.025 0.025 0.025" material="cube_mat" mass="0.08" contype="1" conaffinity="1" condim="4" friction="0.8 0.02 0.002" solimp="0.995 0.999 0.0005" solref="0.003 1" margin="0.0002" gap="0" />
     </body>
     <body name="hand_mount" pos="0 0 0">
-      <joint name="hand_x" type="slide" axis="1 0 0" damping="220" armature="0.25" />
-      <joint name="hand_y" type="slide" axis="0 1 0" damping="220" armature="0.25" />
-      <joint name="hand_z" type="slide" axis="0 0 1" damping="220" armature="0.25" />
-      <joint name="hand_roll" type="hinge" axis="1 0 0" damping="55" armature="0.08" />
-      <joint name="hand_pitch" type="hinge" axis="0 1 0" damping="55" armature="0.08" />
-      <joint name="hand_yaw" type="hinge" axis="0 0 1" damping="55" armature="0.08" />
+      <joint name="hand_x" type="slide" axis="1 0 0" damping="1400" armature="1.0" />
+      <joint name="hand_y" type="slide" axis="0 1 0" damping="1400" armature="1.0" />
+      <joint name="hand_z" type="slide" axis="0 0 1" damping="1400" armature="1.0" />
+      <joint name="hand_roll" type="hinge" axis="1 0 0" damping="350" armature="0.35" />
+      <joint name="hand_pitch" type="hinge" axis="0 1 0" damping="350" armature="0.35" />
+      <joint name="hand_yaw" type="hinge" axis="0 0 1" damping="350" armature="0.35" />
       <body name="base_link" gravcomp="1">
         <geom type="mesh" rgba="1 1 1 1" mesh="base_link" contype="1" conaffinity="1" condim="4" friction="2.5 0.08 0.008" solimp="0.995 0.999 0.0005" solref="0.004 1" margin="0.0002" gap="0" />
       </body>
@@ -204,12 +204,12 @@
     <connect body1="th_distal_link" body2="th_proximal_link" anchor="-0.001 -0.0015 -0.010" solimp="0.95 0.95 0.001" solref="0.005 1" />
   </equality>
   <actuator>
-    <position name="hand_x" joint="hand_x" kp="500" ctrlrange="-0.50 0.50" ctrllimited="true" />
-    <position name="hand_y" joint="hand_y" kp="500" ctrlrange="-0.40 0.60" ctrllimited="true" />
-    <position name="hand_z" joint="hand_z" kp="500" ctrlrange="-0.20 0.80" ctrllimited="true" />
-    <position name="hand_roll" joint="hand_roll" kp="120" ctrlrange="-0.8 0.8" ctrllimited="true" />
-    <position name="hand_pitch" joint="hand_pitch" kp="120" ctrlrange="-0.8 0.8" ctrllimited="true" />
-    <position name="hand_yaw" joint="hand_yaw" kp="120" ctrlrange="-1.2 1.2" ctrllimited="true" />
+    <position name="hand_x" joint="hand_x" kp="5000" ctrlrange="-0.50 0.50" ctrllimited="true" />
+    <position name="hand_y" joint="hand_y" kp="5000" ctrlrange="-0.40 0.60" ctrllimited="true" />
+    <position name="hand_z" joint="hand_z" kp="5000" ctrlrange="-0.20 0.80" ctrllimited="true" />
+    <position name="hand_roll" joint="hand_roll" kp="1200" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <position name="hand_pitch" joint="hand_pitch" kp="1200" ctrlrange="-0.8 0.8" ctrllimited="true" />
+    <position name="hand_yaw" joint="hand_yaw" kp="1200" ctrlrange="-1.2 1.2" ctrllimited="true" />
     <position name="index_finger" joint="if_proximal_link" kp="35" ctrlrange="0 1.44" ctrllimited="true" />
     <position name="middle_finger" joint="mf_proximal_link" kp="35" ctrlrange="0 1.44" ctrllimited="true" />
     <position name="ring_finger" joint="rf_proximal_link" kp="35" ctrlrange="0 1.44" ctrllimited="true" />
